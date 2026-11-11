@@ -203,10 +203,7 @@ It is responsible for:
 
 
 or else
-in powershell do this first :
-winget install -e --id Python.Python.3.11
- 
-then give this prompt to agent : 
+
  
 Part 1: Automated PaddleOCR Setup Script
 Save this script as setup_paddleocr.ps1 (or run step-by-step in PowerShell inside your directory):
