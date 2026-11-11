@@ -200,3 +200,73 @@ It is responsible for:
 - Reduced dependency on cloud-based OCR services.
 - Configurable OCR provider architecture.
 - Structured OCR output for downstream question extraction.
+
+
+or else
+in powershell do this first :
+winget install -e --id Python.Python.3.11
+ 
+then give this prompt to agent : 
+ 
+Part 1: Automated PaddleOCR Setup Script
+Save this script as setup_paddleocr.ps1 (or run step-by-step in PowerShell inside your directory):
+# 1. Clone repository (if not already cloned)
+git clone https://github.com/PaddlePaddle/PaddleOCR.git
+cd PaddleOCR
+# 2. Create Virtual Environment with Python 3.11 (64-bit)
+# (Ensure Python 3.11 is installed via: winget install Python.Python.3.11)
+py -3.11 -m venv paddle_env
+.\paddle_env\Scripts\Activate.ps1
+# 3. Upgrade pip & install PaddlePaddle CPU
+python -m pip install --upgrade pip
+pip install paddlepaddle -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+# 4. Install PaddleOCR & PaddleHub with locked compatible dependencies (NumPy 1.26.x)
+pip install "numpy==1.26.4" "scipy<1.14" "pandas<2.3" "opencv-python<4.11" "opencv-contrib-python<4.11"
+pip install "pyarrow<17.0.0" "datasets<2.19.0" "huggingface_hub<0.24.0" "scikit-image<0.24"
+pip install "paddle2onnx==1.3.1" paddlehub paddleocr
+pip install --force-reinstall --no-cache-dir pyclipper shapely lmdb stringzilla
+pip install "numpy==1.26.4" --no-deps
+# 5. Pre-download required inference models for ocr_system
+python -c "
+import urllib.request, tarfile, os, shutil
+base_dir = r'inference'
+os.makedirs(base_dir, exist_ok=True)
+models = {
+    'det.tar': 'https://paddleocr.bj.bcebos.com/PP-OCRv3/chinese/ch_PP-OCRv3_det_infer.tar',
+    'rec.tar': 'https://paddleocr.bj.bcebos.com/PP-OCRv3/chinese/ch_PP-OCRv3_rec_infer.tar',
+    'cls.tar': 'https://paddleocr.bj.bcebos.com/dygraph_v2.0/ch/ch_ppocr_mobile_v2.0_cls_infer.tar'
+}
+for name, url in models.items():
+    tar_path = os.path.join(base_dir, name)
+    print(f'Downloading {url}...')
+    urllib.request.urlretrieve(url, tar_path)
+    with tarfile.open(tar_path) as tar:
+        tar.extractall(base_dir)
+# Ensure folder name matches deploy/hubserving/ocr_system/params.py
+det_src = os.path.join(base_dir, 'ch_PP-OCRv3_det_infer')
+det_dest = os.path.join(base_dir, 'PP-OCRv3_mobile_det_infer')
+if os.path.exists(det_src) and not os.path.exists(det_dest):
+    shutil.copytree(det_src, det_dest)
+print('All models downloaded and ready.')
+"
+# 6. Install OCR System into PaddleHub
+hub install deploy/hubserving/ocr_system/
+# 7. Start the Local OCR Service
+hub serving start -m ocr_system -p 8866
+ 
+else if wanted to do prompt :
+ 
+Part 3: Copy-Paste Prompt for an AI Agent on Any System
+If you are setting this up on another machine or giving instructions to an AI coding assistant, paste this prompt:
+I want to set up and integrate the PaddleOCR Hub Serving endpoint with our `q-a` Question Extraction System.
+Please perform the following steps:
+1. Verify that Python 3.11 (64-bit) is installed (`py -3.11 --version`). If not, install Python 3.11.
+2. In the `PaddleOCR` directory, create a virtual environment `paddle_env` using Python 3.11.
+3. Install `paddlepaddle` CPU from `https://www.paddlepaddle.org.cn/packages/stable/cpu/`.
+4. Install `paddlehub` and `paddleocr` with NumPy pinned to `1.26.4` and install pre-compiled binary wheels for `pyclipper`, `shapely`, `lmdb`, and `stringzilla` to avoid NumPy 2.x C-extension errors (`ModuleNotFoundError: No module named 'numpy._core._multiarray_umath'`).
+5. Download the PP-OCRv3 detection (`ch_PP-OCRv3_det_infer`), recognition (`ch_PP-OCRv3_rec_infer`), and classification (`ch_ppocr_mobile_v2.0_cls_infer`) tar files into `PaddleOCR/inference/` and ensure the detection directory is copied to `PP-OCRv3_mobile_det_infer`.
+6. Run `hub install deploy/hubserving/ocr_system/` and verify it reports "Successfully installed ocr_system".
+7. Start the serving daemon with `hub serving start -m ocr_system -p 8866`.
+8. In `q-a`, ensure `.env` has `OCR_PROVIDER=paddleocr` and `PADDLE_OCR_URL=http://127.0.0.1:8866/predict/ocr_system`, and test OCR with `npm test tests/documents-and-ocr.test.ts`.
+ 
+ 
