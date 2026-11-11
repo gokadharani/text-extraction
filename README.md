@@ -134,3 +134,69 @@ src/
    npm test
    npm run build
    ```
+
+
+   ## PaddleOCR Integration – Local OCR Service
+
+This project uses PaddleOCR as a local OCR service to extract text from scanned documents and images.
+
+### 1. OCR Setup
+
+The OCR environment uses:
+
+- Python 3.11
+- PaddlePaddle (CPU version)
+- PaddleOCR
+- PaddleHub
+- PP-OCRv3 detection, recognition, and classification models
+
+### 2. Start the OCR Service
+
+Activate the Python virtual environment and start the PaddleOCR service:
+
+```powershell
+.\paddle_env\Scripts\Activate.ps1
+hub serving start -m ocr_system -p 8866
+```
+
+The local OCR endpoint is:
+
+```text
+http://127.0.0.1:8866/predict/ocr_system
+```
+
+### 3. Environment Configuration
+
+Configure the following variables in your `.env` file:
+
+```env
+OCR_PROVIDER=paddleocr
+PADDLE_OCR_URL=http://127.0.0.1:8866/predict/ocr_system
+```
+
+### 4. Application Integration
+
+The OCR provider adapter (`src/adapters/ocr/ocr-provider.ts`) communicates with the local PaddleOCR service.
+
+It is responsible for:
+
+- Sending document images to the OCR endpoint.
+- Extracting recognized text.
+- Normalizing text, bounding boxes, and confidence scores.
+- Returning structured OCR results to the extraction pipeline.
+
+### 5. Extraction Workflow
+
+1. A scanned PDF page or image is sent for preprocessing.
+2. The application sends the processed image to PaddleOCR.
+3. PaddleOCR recognizes the text.
+4. The adapter normalizes the OCR response.
+5. The extracted text is passed to the question extraction pipeline.
+6. Questions are parsed and validated.
+
+### 6. Benefits
+
+- Local OCR processing.
+- Reduced dependency on cloud-based OCR services.
+- Configurable OCR provider architecture.
+- Structured OCR output for downstream question extraction.
