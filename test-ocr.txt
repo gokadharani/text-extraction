@@ -1,0 +1,11 @@
+﻿Question 1: What is the capital of India?
+A) Mumbai
+B) New Delhi
+C) Chennai
+D) Hyderabad
+
+Question 2: Which language runs in a browser?
+A) Python
+B) Java
+C) JavaScript
+D) C++

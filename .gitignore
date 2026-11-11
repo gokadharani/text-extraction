@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+build
+dist
+.env
+.env*.local
+.private-storage
+coverage
+playwright-report
+test-results
+*.tsbuildinfo
+next-env.d.ts

@@ -1,0 +1,286 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ImportStatus {
+  UPLOADED
+  QUEUED
+  PROCESSING
+  REVIEW_REQUIRED
+  COMPLETED
+  FAILED
+}
+
+enum DocumentFormat {
+  DIGITAL_PDF
+  SCANNED_PDF
+  MIXED_PDF
+  DOCX
+  DOC
+  XLSX
+  XLS
+  IMAGE
+  UNKNOWN
+}
+
+enum UserDeclaredFormat {
+  AUTO_DETECT
+  DIGITAL_PDF
+  SCANNED_PRINTED_PDF
+  SCANNED_HANDWRITTEN_PDF
+  DOCX
+  XLSX
+  IMAGE
+}
+
+enum PageClassification {
+  DIGITAL
+  SCANNED
+  MIXED
+  TABULAR
+  DOCUMENT_FLOW
+}
+
+enum QuestionType {
+  MCQ
+  MSQ
+  TRUE_FALSE
+  UNKNOWN
+}
+
+enum AnswerStatus {
+  EXTRACTED
+  ANSWER_KEY
+  AI_INFERRED
+  MISSING
+  UNCERTAIN
+  VERIFIED
+}
+
+enum AnswerProvenance {
+  EXPLICIT_SOURCE
+  ANSWER_KEY
+  AI_INFERRED
+  MISSING
+}
+
+enum QuestionReviewStatus {
+  PENDING_REVIEW
+  NEEDS_ATTENTION
+  APPROVED
+  REJECTED
+}
+
+enum ReviewAction {
+  CREATED
+  EDITED
+  APPROVED
+  REJECTED
+  BULK_APPROVED
+  BULK_REJECTED
+  AI_REPAIRED
+}
+
+model ImportJob {
+  id                       String         @id @default(cuid())
+  fileName                 String
+  originalMimeType         String
+  detectedFormat           DocumentFormat      @default(UNKNOWN)
+  userDeclaredFormat       UserDeclaredFormat? @default(AUTO_DETECT)
+  fileSize                 Int
+  fileSha256               String
+  storageKey               String
+  status                   ImportStatus   @default(UPLOADED)
+  currentStage             String         @default("UPLOADED")
+  progressPercent          Int            @default(0)
+  totalPages               Int            @default(0)
+  pagesProcessed           Int            @default(0)
+  totalExtractedQuestions  Int            @default(0)
+  questionsRequiringReview Int            @default(0)
+  approvedQuestionsCount   Int            @default(0)
+  ocrMethod                String?
+  ocrDurationMs            Int            @default(0)
+  aiUsed                   Boolean        @default(false)
+  aiModel                  String?
+  aiInputTokens            Int            @default(0)
+  aiOutputTokens           Int            @default(0)
+  estimatedAiCostUsd       Float          @default(0)
+  aiBudgetUsd              Float          @default(0.50)
+  processingDurationMs     Int            @default(0)
+  errorMessage             String?
+  errorCode                String?
+  isDuplicateFile          Boolean        @default(false)
+  cancelledAt              DateTime?
+  uploadedById             String?
+  startedAt                DateTime?
+  completedAt              DateTime?
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+
+  pages     ImportPage[]
+  questions Question[]
+  assets    QuestionAsset[]
+
+  @@index([status])
+  @@index([fileSha256])
+  @@index([createdAt(sort: Desc)])
+  @@index([uploadedById])
+}
+
+model ImportPage {
+  id                 String             @id @default(cuid())
+  importJobId        String
+  pageNumber         Int
+  classification     PageClassification @default(DIGITAL)
+  rawText            String             @default("")
+  normalizedText     String             @default("")
+  ocrUsed            Boolean            @default(false)
+  ocrProvider        String?
+  ocrConfidence      Float?
+  ocrDurationMs      Int                @default(0)
+  width              Int?
+  height             Int?
+  previewStorageKey  String?
+  boundingBoxes      Json               @default("[]") @db.JsonB
+  metadata           Json               @default("{}") @db.JsonB
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@unique([importJobId, pageNumber])
+  @@index([importJobId])
+}
+
+model Question {
+  id                   String               @id @default(cuid()) @map("question_id")
+  type                 QuestionType         @default(UNKNOWN) @map("question_type")
+  content              Json                 @map("content") @db.JsonB
+  explanation          Json?                @map("explanation") @db.JsonB
+  answerStatus         AnswerStatus         @default(MISSING) @map("answer_status")
+  answerProvenance     AnswerProvenance     @default(MISSING) @map("answer_provenance")
+  reviewStatus         QuestionReviewStatus @default(PENDING_REVIEW) @map("review_status")
+  is_active            Boolean              @default(true) @map("is_active")
+  publishedToBank      Boolean              @default(false) @map("published_to_bank")
+  publishedAt          DateTime?            @map("published_at")
+
+  // Pipeline & Document Provenance
+  sourceFileId         String               @map("source_file_id")
+  importJobId          String               @map("import_job_id")
+  sourcePage           Int                  @default(1) @map("source_page")
+  sourcePageEnd        Int?                 @map("source_page_end")
+  sourceQuestionNumber String               @default("1") @map("source_question_number")
+  sourceSection        String?              @map("source_section")
+  sourceOrder          Int                  @map("source_order")
+  confidence           Float                @default(1.0) @map("confidence")
+  sharedPassage        Json?                @map("shared_passage") @db.JsonB
+  boundingBox          Json?                @map("bounding_box") @db.JsonB
+  warnings             Json                 @default("[]") @map("warnings") @db.JsonB
+  aiRepaired           Boolean              @default(false) @map("ai_repaired")
+  aiRepairModel        String?              @map("ai_repair_model")
+  aiRepairReason       String?              @map("ai_repair_reason")
+  contentHash          String               @map("content_hash")
+  isDuplicate          Boolean              @default(false) @map("is_duplicate")
+  duplicateOfId        String?              @map("duplicate_of_id")
+
+  createdAt            DateTime             @default(now()) @map("created_at")
+  updatedAt            DateTime             @updatedAt @map("updated_at")
+
+  // Relations
+  options              Option[]
+  importJob            ImportJob            @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  assets               QuestionAsset[]
+  reviewLogs           QuestionReviewLog[]
+
+  @@unique([importJobId, sourceOrder])
+  @@index([importJobId])
+  @@index([reviewStatus])
+  @@index([type])
+  @@index([contentHash])
+  @@index([publishedToBank])
+  @@index([is_active])
+}
+
+model Option {
+  id           String   @id @default(cuid()) @map("option_id")
+  questionId   String   @map("question_id")
+  label        String   @map("label")
+  content      Json     @map("content") @db.JsonB
+  isCorrect    Boolean  @default(false) @map("is_correct")
+  displayOrder Int      @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  question     Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, label])
+  @@index([questionId, displayOrder])
+  @@index([questionId])
+}
+
+model QuestionAsset {
+  id           String    @id @default(cuid())
+  importJobId  String
+  questionId   String?
+  pageNumber   Int?
+  assetType    String    @default("IMAGE")
+  mimeType     String
+  storageKey   String
+  fileSize     Int
+  width        Int?
+  height       Int?
+  sha256       String
+  altText      String?
+  createdAt    DateTime  @default(now())
+
+  importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  question  Question? @relation(fields: [questionId], references: [id], onDelete: SetNull)
+
+  @@index([importJobId])
+  @@index([questionId])
+  @@index([sha256])
+}
+
+model QuestionReviewLog {
+  id             String       @id @default(cuid())
+  questionId     String
+  reviewerId     String       @default("system")
+  action         ReviewAction
+  previousState  Json?        @db.JsonB
+  newState       Json?        @db.JsonB
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model AiRepairCache {
+  id            String   @id @default(cuid())
+  inputHash     String   @unique
+  model         String
+  repairedJson  Json     @db.JsonB
+  inputTokens   Int
+  outputTokens  Int
+  createdAt     DateTime @default(now())
+
+  @@index([inputHash])
+}
+
+model OcrCache {
+  id           String   @id @default(cuid())
+  imageHash    String   @unique
+  provider     String
+  ocrResult    Json     @db.JsonB
+  confidence   Float
+  createdAt    DateTime @default(now())
+
+  @@index([imageHash])
+}
